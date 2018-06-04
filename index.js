@@ -4,6 +4,8 @@
  const bodyParser = require('body-parser');
  //include sqlite3 for the database
  const sqlite3 = require('sqlite3').verbose();
+ //include multiparty middleware
+ const multipart = require('connect-multiparty');
  //include bcrypt module
  const bcrypt = require('bcrypt');
 
@@ -11,7 +13,9 @@
  const PORT = process.env.PORT || 5000;
  //instantiate express
  const app = express();
+ const multipartMiddleware = multipart();
  const saltRounds = 10;
+
 
 
  // disable urlencoded form request
@@ -79,9 +83,6 @@
      // db.close();
  });
 
-
- //hashing password 
-
  app.post('/login', (req, res) => {
 
      //connects to the database
@@ -95,18 +96,102 @@
          }
          db.close();
 
-         //check if email is correct
+         //check if email is correct and return error message
          if (rows.length == 0) {
              return res.json({
                  status: false,
-                 message: "Sorry, wrong email"
+                 message: "wrong credentials provided. Please retry"
              });
          }
+         //storing rows in a variable user
+         let user = rows[0];
+
+         //comparing passwords and storing in variable authenticated
+         let authenticated = bcrypt.compareSync(req.body.password, user.password);
+
+         //delete user password for security
+         delete user.password;
+
+         //if passwords match,return user view
+         if (authenticated) {
+             return res.json({
+                 status: true,
+                 user: user
+             });
+         }
+         //if passwords do not match, return error message
+         return res.json({
+             status: false,
+             message: "wrong credentials provided. Please retry*"
+         });
      });
  });
 
- app.post('/invoice', (req, res) => {
-     res.send("Create and Send an invoice");
+ app.post('/invoice', multipartMiddleware, (req, res) => {
+     let db = new sqlite3.Database("./database/invoyce.db");
+     //check if invoice name is empty
+     if ((req.body.name == '')) {
+         return res.json({
+             status: false,
+             message: "Invoice needs a name"
+         });
+     } else {
+         //check if email already exists
+
+         let column = `SELECT * from invoices where name='${req.body.name}'`;
+
+         db.all(column, [], (err, rows) => {
+
+             if (err) {
+                 throw err;
+             }
+
+             if (rows.length != 0) {
+                 return res.json({
+                     status: false,
+                     message: "invoice already created"
+                 });
+             } else {
+                 //insert new invoice into invoice table
+                 let sql = `INSERT INTO invoices(name,user_id,paid) VALUES(
+                                                                    '${req.body.name}',
+                                                                    '${req.body.user_id}',
+                                                                    0
+                                                                )`;
+                 db.serialize(() => {
+                     //run invoice query
+                     db.run(sql, (err) => {
+                         if (err) {
+                             throw err;
+                         }
+
+                         //get the last invoice ID created 
+                         let invoice_id = this.lastID;
+
+                         //loop through the number of transactions
+                         for (let i = 0; i < req.body.txn_names.length; i++) {
+
+                             //insert transaction into the transaction table
+                             let query = `INSERT INTO transactions(name,price,invoice_id) VALUES(
+                '${req.body.txn_names[i]}',
+                '${req.body.txn_prices[i]}',
+                '${invoice_id}'
+            )`;
+                             //run transaction query
+                             db.run(query);
+                         }
+
+                         //return message to user
+                         return res.json({
+                             status: true,
+                             message: "Invoice created"
+                         });
+                     });
+
+                 });
+             }
+         });
+     }
  });
 
  app.get('/invoice/user/:user_id', (req, res) => {
