@@ -38,8 +38,8 @@
      let db = new sqlite3.Database("./database/invoyce.db");
 
      //check to make sure none of the field/fields are empty
-     if (req.body.name == '' || req.body.email == '' ||
-         req.body.company_name == '' || req.body.password == '') {
+     if (req.body.name.length == 0 || req.body.email.length == 0 ||
+         req.body.company_name.lenght == 0 || req.body.password.length == 0) {
          return res.json({
              'status': false,
              'message': 'All fields are required'
@@ -130,14 +130,13 @@
  app.post('/invoice', multipartMiddleware, (req, res) => {
      let db = new sqlite3.Database("./database/invoyce.db");
      //check if invoice name is empty
-     if ((req.body.name == '')) {
+     if ((req.body.name.length == 0)) {
          return res.json({
              status: false,
              message: "Invoice needs a name"
          });
      } else {
          //check if email already exists
-
          let column = `SELECT * from invoices where name='${req.body.name}'`;
 
          db.all(column, [], (err, rows) => {
@@ -146,12 +145,14 @@
                  throw err;
              }
 
+             //check if invoice already exixts
              if (rows.length != 0) {
                  return res.json({
                      status: false,
                      message: "invoice already created"
                  });
              } else {
+
                  //insert new invoice into invoice table
                  let sql = `INSERT INTO invoices(name,user_id,paid) VALUES(
                                                                     '${req.body.name}',
@@ -184,6 +185,7 @@
                          //return message to user
                          return res.json({
                              status: true,
+                             id: invoice_id,
                              message: "Invoice created"
                          });
                      });
@@ -194,12 +196,43 @@
      }
  });
 
- app.get('/invoice/user/:user_id', (req, res) => {
-     res.send("View all invoices");
+ app.get('/invoice/user/:user_id', multipartMiddleware, (req, res) => {
+     //connect to the database
+     let db = new sqlite3.Database("./database/invoyce.db");
+
+     //get all invoices
+     let sql = `SELECT * FROM invoices WHERE user_id='${req.params.user_id}'`;
+     db.all(sql, [], (err, rows) => {
+         console.log(rows);
+         if (err) {
+             throw err;
+         }
+         //return rows of transaction
+         return res.json({
+             status: true,
+             transactions: rows
+         });
+     });
  });
 
- app.get('/invoice/user/:user_id/:invoice_id', (req, res) => {
-     res.send("view user and certain invoice id");
+ app.get('/invoice/user/:user_id/:invoice_id', multipartMiddleware, (req, res) => {
+     //connect to database
+     let db = new sqlite3.Database("./database/invoyce.db");
+
+     //get invoice with specific id number and user id
+     let sql = `SELECT * FROM invoices LEFT JOIN transactions ON invoices.id=transactions.invoice_id WHERE user_id='${
+        req.params.user_id
+      }' AND invoice_id='${req.params.invoice_id}'`;
+     db.all(sql, [], (err, rows) => {
+         if (err) {
+             throw err;
+         }
+         //return row
+         return res.json({
+             status: true,
+             transactions: rows
+         });
+     });
  });
 
  app.post('/invoice/send', (req, res) => {
