@@ -10,7 +10,7 @@
  const bcrypt = require('bcrypt');
 
  //set application to run on port 5000;
- let PORT = process.env.PORT || 5000;
+ const PORT = process.env.PORT || 5000;
 
  //instantiate express
  const app = express();
